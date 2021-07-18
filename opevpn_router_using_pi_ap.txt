@@ -1,0 +1,74 @@
+openvpn router using raspberry pi with own dhcp assuming wlan1 is the access point and wlan0 is the source. eth0 is use as link-local for configuration. change as needed
+
+sudo apt install dnsmasq hostapd
+sudo service stop dnsmasq
+sudo service stop hostapd
+
+sudo vi /etc/hostapd/hostapd.conf
+
+interface=wlan1
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+ssid=pi
+wpa_passphrase=12345678
+
+sudo vi /etc/dnsmasq.conf
+
+interface=wlan1
+  dhcp-range=192.168.0.11,192.168.0.30,255.255.255.0,24h
+
+sudo vi /etc/dhcpcd.conf
+
+interface wlan1
+static ip_address=192.168.0.10/24
+denyinterfaces wlan1
+
+sudo vi /etc/default/hostapd
+
+DAEMON_CONF="/etc/hostapd/hostapd.conf"
+
+sudo vi /etc/sysctl.conf
+
+net.ipv4.ip_forward=1
+
+sudo iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE
+sudo iptables -A FORWARD -i tun0 -o wlan1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+sudo iptables -A FORWARD -i wlan1 -o tun0 -j ACCEPT
+
+sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
+
+sudo vi /etc/rc.local
+
+iptables-restore < /etc/iptables.ipv4.nat
+#before exit 0
+
+#create US.conf with auth user pass txt
+sudo systemctl enable openvpn@US
+
+sudo vi /etc/network/interfaces
+
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+
+allow-hotplug wlan0
+iface wlan0 inet dhcp
+    wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+
+allow-hotplug wlan1
+iface wlan1 inet static
+	address 192.168.0.10
+
+sudo reboot
+
+
